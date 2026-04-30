@@ -1,0 +1,294 @@
+# AI-Powered Bird Call Detection Configuration
+# Professional configuration for endangered bird species detection
+
+# Project Information
+project:
+  name: "AI Bird Call Detection"
+  version: "1.0.0"
+  description: "Real-time endangered bird species detection for wildlife conservation"
+
+# API Settings - Xeno-Canto Integration
+xeno_canto:
+  base_url: "https://www.xeno-canto.org/api/2/recordings"
+  timeout: 30
+  max_retries: 3
+  cache_enabled: true
+  cache_dir: "./data/cache"
+  rate_limit: 1.0  # seconds between requests
+  max_concurrent_downloads: 5
+
+# Target Endangered Species Configuration
+species:
+  target_species:
+    - scientific_name: "Grus americana"
+      common_name: "Whooping Crane"
+      priority: "critical"
+      class_id: 0
+      conservation_status: "Endangered"
+    - scientific_name: "Gymnogyps californianus"
+      common_name: "California Condor"
+      priority: "critical"
+      class_id: 1
+      conservation_status: "Critically Endangered"
+    - scientific_name: "Campephilus principalis"
+      common_name: "Ivory-billed Woodpecker"
+      priority: "critical"
+      class_id: 2
+      conservation_status: "Critically Endangered"
+    - scientific_name: "Numenius borealis"
+      common_name: "Eskimo Curlew"
+      priority: "critical"
+      class_id: 3
+      conservation_status: "Critically Endangered"
+    - scientific_name: "Tympanuchus cupido attwateri"
+      common_name: "Attwater's Prairie-chicken"
+      priority: "high"
+      class_id: 4
+      conservation_status: "Critically Endangered"
+
+  # Background species for negative samples
+  background_species:
+    - scientific_name: "Turdus migratorius"
+      common_name: "American Robin"
+    - scientific_name: "Corvus brachyrhynchos"
+      common_name: "American Crow"
+    - scientific_name: "Cardinalis cardinalis"
+      common_name: "Northern Cardinal"
+    - scientific_name: "Poecile carolinensis"
+      common_name: "Carolina Chickadee"
+
+# Audio Processing Configuration
+audio:
+  sample_rate: 32000    # High quality for bird vocalizations
+  duration: 5.0         # Seconds per audio segment
+  hop_length: 512       # STFT hop length
+  n_fft: 2048          # FFT window size
+  n_mels: 128          # Number of mel frequency bins
+  fmax: 16000          # Maximum frequency (most bird calls < 16kHz)
+  fmin: 300            # Minimum frequency to filter noise
+  window: "hamming"     # Window function for STFT
+  center: true          # Center the frames
+  norm: "slaney"        # Mel scale normalization
+
+# Preprocessing Configuration
+preprocessing:
+  normalization: "peak"     # peak, rms, lufs
+  remove_silence: true
+  silence_threshold: 30     # dB below peak
+  bandpass_filter: true
+  low_cutoff: 300          # Hz
+  high_cutoff: 8000        # Hz
+  apply_trim: true
+  pad_mode: "constant"     # constant, reflect, edge
+
+# Model Configuration
+model:
+  architecture: "efficientnet_b1"
+  num_classes: 5           # Number of target species
+  input_shape: [128, 157, 1]  # [n_mels, time_frames, channels]
+  pretrained: true
+  dropout_rate: 0.5
+  use_attention: false
+  freeze_backbone: false   # Whether to freeze pretrained weights initially
+
+# Training Configuration
+training:
+  # Basic parameters
+  batch_size: 32
+  epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  
+  # Data splitting
+  validation_split: 0.2
+  test_split: 0.1
+  random_seed: 42
+  
+  # Training strategy
+  use_class_weights: true
+  label_smoothing: 0.1
+  mixup_alpha: 0.2
+  
+  # Optimization
+  optimizer: "adamw"        # adamw, adam, sgd
+  scheduler: "reduce_lr_on_plateau"  # reduce_lr_on_plateau, cosine, step
+  
+  # Early stopping and checkpointing
+  early_stopping_patience: 10
+  reduce_lr_patience: 5
+  reduce_lr_factor: 0.5
+  min_lr: 1e-7
+  save_best_only: true
+  
+  # Monitoring
+  monitor_metric: "val_f1_score"
+  mode: "max"              # max for accuracy/f1, min for loss
+
+# Data Augmentation Configuration
+augmentation:
+  enabled: true
+  
+  # Time-based augmentations
+  time_stretching:
+    enabled: true
+    rate_range: [0.8, 1.2]
+    probability: 0.5
+    
+  pitch_shifting:
+    enabled: true
+    steps_range: [-2, 2]
+    probability: 0.5
+    
+  # Amplitude augmentations
+  noise_injection:
+    enabled: true
+    noise_factor: 0.005
+    probability: 0.3
+    
+  gain:
+    enabled: true
+    gain_range: [0.7, 1.3]
+    probability: 0.4
+    
+  # Advanced augmentations
+  time_masking:
+    enabled: true
+    max_mask_size: 10      # frames
+    num_masks: 2
+    probability: 0.3
+    
+  frequency_masking:
+    enabled: true
+    max_mask_size: 8       # mel bins
+    num_masks: 2
+    probability: 0.3
+    
+  # Mixup augmentation
+  mixup:
+    enabled: true
+    alpha: 0.2
+    probability: 0.5
+
+# Inference Configuration
+inference:
+  confidence_threshold: 0.7
+  batch_size: 16
+  real_time_buffer_size: 1024
+  overlap_ratio: 0.5
+  smoothing_window: 5      # frames for prediction smoothing
+  
+  # Alert thresholds for different priority levels
+  alert_thresholds:
+    critical: 0.8
+    high: 0.7
+    medium: 0.6
+    
+  # Post-processing
+  apply_nms: true          # Non-maximum suppression
+  nms_threshold: 0.5
+
+# Data Collection Configuration
+data_collection:
+  recordings_per_species: 100
+  max_recording_length: 300    # seconds
+  min_recording_quality: "C"   # A, B, C, D, E (A is best)
+  exclude_uncertain_ids: true
+  negative_samples_ratio: 1.0  # ratio to positive samples
+  
+  # Geographic filtering (optional)
+  geographic_filter:
+    enabled: false
+    regions: ["north-america", "usa"]
+    
+  # Quality filtering
+  quality_filter:
+    min_duration: 3.0      # seconds
+    max_duration: 300.0    # seconds
+    exclude_captive: true
+    require_geotag: false
+
+# Logging Configuration
+logging:
+  level: "INFO"            # DEBUG, INFO, WARNING, ERROR
+  log_dir: "./logs"
+  log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_logging: true
+  console_logging: true
+  
+  # Weights & Biases integration
+  wandb:
+    enabled: false         # Set to true for experiment tracking
+    project: "bird-call-detection"
+    entity: "your-wandb-username"
+    tags: ["conservation", "audio", "deep-learning"]
+
+# Hardware Configuration
+hardware:
+  device: "auto"           # auto, cpu, cuda, mps
+  num_workers: 4           # Data loader workers
+  pin_memory: true
+  persistent_workers: true
+  
+  # GPU specific
+  gpu_id: 0
+  mixed_precision: true    # Use automatic mixed precision
+  
+  # Memory management
+  max_memory_usage: 0.8    # Fraction of available GPU memory
+
+# Paths Configuration
+paths:
+  data_dir: "./data"
+  models_dir: "./models"
+  logs_dir: "./logs"
+  cache_dir: "./data/cache"
+  raw_audio_dir: "./data/raw"
+  processed_dir: "./data/processed"
+  checkpoints_dir: "./models/saved_models"
+
+# Production Deployment
+deployment:
+  model_format: "pytorch"   # pytorch, onnx, tensorrt
+  optimization: "none"      # none, quantization, pruning, distillation
+  target_platform: "gpu"   # cpu, gpu, edge
+  max_latency_ms: 100
+  
+  # API configuration
+  api:
+    host: "0.0.0.0"
+    port: 5000
+    workers: 4
+    timeout: 30
+    max_requests_per_minute: 100
+
+# Evaluation Metrics
+evaluation:
+  metrics: ["accuracy", "precision", "recall", "f1_score", "auc_roc"]
+  per_class_metrics: true
+  confusion_matrix: true
+  classification_report: true
+  
+  # Conservation-specific metrics
+  conservation_metrics:
+    false_positive_cost: 1.0    # Cost of false alarms
+    false_negative_cost: 10.0   # Cost of missed endangered species
+    
+# Monitoring and Alerts
+monitoring:
+  health_check_interval: 300   # seconds
+  performance_tracking: true
+  resource_monitoring: true
+  alert_on_degradation: true
+  
+  # Performance thresholds
+  thresholds:
+    min_accuracy: 0.85
+    max_latency_ms: 150
+    max_memory_usage_gb: 8.0
+    
+# Experimental Features
+experimental:
+  multi_modal: false       # Combine audio with other data types
+  few_shot_learning: false # Adapt to new species with few samples
+  active_learning: false   # Iterative model improvement
+  federated_learning: false # Distributed training

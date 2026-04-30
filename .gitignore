@@ -1,0 +1,340 @@
+# AI-Powered Bird Call Detection - Git Ignore File
+# Professional .gitignore for Python ML/AI projects
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+.idea/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Machine Learning / AI specific ignores
+# =====================================
+
+# Model checkpoints and weights
+models/saved_models/*.pth
+models/saved_models/*.pt
+models/saved_models/*.pkl
+models/saved_models/*.joblib
+models/saved_models/*.h5
+models/saved_models/*.hdf5
+models/saved_models/*.pb
+models/saved_models/*.onnx
+models/saved_models/*.tflite
+
+# Large datasets
+data/raw/*.wav
+data/raw/*.mp3
+data/raw/*.flac
+data/raw/*.ogg
+data/raw/*.m4a
+data/processed/*.npy
+data/processed/*.npz
+data/processed/*.pkl
+
+# Cache directories
+data/cache/
+.cache/
+cache/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Audio processing temporary files
+*.wav.tmp
+*.mp3.tmp
+
+# Large log files
+logs/*.log
+logs/*.out
+logs/*.err
+*.log
+
+# Jupyter notebook outputs (keep structure, ignore outputs)
+notebooks/.ipynb_checkpoints/
+notebooks/outputs/
+
+# MLflow tracking
+mlruns/
+mlflow.db
+
+# Weights & Biases
+wandb/
+
+# TensorBoard logs
+runs/
+logs/tensorboard/
+
+# Hydra configuration outputs
+outputs/
+.hydra/
+
+# DVC (Data Version Control)
+.dvc/
+.dvcignore
+
+# Large compressed files
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Configuration files with sensitive data
+config/secrets.yaml
+config/credentials.json
+config/api_keys.env
+.secrets
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Audio analysis temporary files
+spectrograms/*.png
+spectrograms/*.jpg
+mel_spectrograms/
+features/
+
+# Model artifacts
+artifacts/
+checkpoints/
+saved_models/
+experiments/
+results/
+
+# Data annotation files (large)
+annotations/*.json
+labels/*.csv
+
+# GPU memory dumps
+*.gpu
+
+# Profiling output
+*.prof
+*.profile
+
+# Large pickled objects
+*.pickle
+
+# Audio feature cache
+*.features
+*.mfcc
+*.stft
+
+# Keep important empty directories but ignore contents
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/cache/.gitkeep
+!models/saved_models/.gitkeep
+!logs/.gitkeep
+
+# But ignore the actual content
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/cache/.gitkeep
+
+# Ignore large model files but keep small config files
+models/saved_models/*
+!models/saved_models/.gitkeep
+!models/saved_models/README.md
+
+# Project specific ignores
+# ========================
+
+# API keys and sensitive configuration
+xeno_canto_api_key.txt
+api_credentials.json
+
+# Large audio datasets
+*.dataset
+dataset/
+
+# Experimental notebooks
+experiments/*.ipynb
+scratch/*.ipynb
+
+# Output files
+output/
+results/
+reports/
+
+# Performance monitoring
+monitoring/
+metrics/
+
+# Docker
+Dockerfile.dev
+docker-compose.dev.yml
+.dockerignore
+
+# Kubernetes
+k8s/dev/
+k8s/staging/
+
+# CI/CD
+.github/workflows/dev.yml
+
+# IDE specific
+*.swp
+*.swo
+*~
+
+# Local development
+local_config.yaml
+dev_config.yaml
+test_config.yaml
