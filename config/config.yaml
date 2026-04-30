@@ -1,69 +1,57 @@
-# ============================================================
-# AI-Powered Bird Call Detection - ML Project Configuration
-# ============================================================
-
 project:
-  name: "Bird Call Detection - ML Extension"
-  version: "2.0.0"
-  description: "Multi-class endangered bird species detection with rigorous ML methodology"
-
-# ---- Xeno-Canto API ----------------------------------------
+  name: Bird Call Detection - ML Extension
+  version: 2.0.0
+  description: Multi-class endangered bird species detection with rigorous ML methodology
 xeno_canto:
-  base_url: "https://www.xeno-canto.org/api/2/recordings"
+  base_url: https://www.xeno-canto.org/api/2/recordings
   timeout: 30
   max_retries: 3
   cache_enabled: true
-  cache_dir: "./data/cache"
+  cache_dir: ./data/cache
   rate_limit: 1.0
   max_concurrent_downloads: 3
-  min_quality: "C"            # A=best, B, C — exclude D and E
-  recordings_per_species: 500 # target; actual may be less for rare species
-
-# ---- Target Species (multi-class, one label per species) ---
+  min_quality: D
+  recordings_per_species: 500
 species:
   target_species:
-    - scientific_name: "Grus americana"
-      common_name: "Whooping Crane"
-      priority: "critical"
-      class_id: 0
-      conservation_status: "Endangered"
-    - scientific_name: "Gymnogyps californianus"
-      common_name: "California Condor"
-      priority: "critical"
-      class_id: 1
-      conservation_status: "Critically Endangered"
-    - scientific_name: "Campephilus principalis"
-      common_name: "Ivory-billed Woodpecker"
-      priority: "critical"
-      class_id: 2
-      conservation_status: "Critically Endangered"
-    - scientific_name: "Tympanuchus cupido attwateri"
-      common_name: "Attwater Prairie-chicken"
-      priority: "high"
-      class_id: 3
-      conservation_status: "Critically Endangered"
-    - scientific_name: "Lanius ludovicianus"
-      common_name: "Loggerhead Shrike"
-      priority: "high"
-      class_id: 4
-      conservation_status: "Near Threatened"
-
-  # Background / negative class
+  - scientific_name: Grus americana
+    common_name: Whooping Crane
+    priority: critical
+    class_id: 0
+    conservation_status: Endangered
+  - scientific_name: Gymnogyps californianus
+    common_name: California Condor
+    priority: critical
+    class_id: 1
+    conservation_status: Critically Endangered
+  - scientific_name: Campephilus principalis
+    common_name: Ivory-billed Woodpecker
+    priority: critical
+    class_id: 2
+    conservation_status: Critically Endangered
+  - scientific_name: Tympanuchus cupido attwateri
+    common_name: Attwater Prairie-chicken
+    priority: high
+    class_id: 3
+    conservation_status: Critically Endangered
+  - scientific_name: Lanius ludovicianus
+    common_name: Loggerhead Shrike
+    priority: high
+    class_id: 4
+    conservation_status: Near Threatened
   background_species:
-    - scientific_name: "Turdus migratorius"
-      common_name: "American Robin"
-      class_id: 5
-    - scientific_name: "Corvus brachyrhynchos"
-      common_name: "American Crow"
-      class_id: 6
-    - scientific_name: "Cardinalis cardinalis"
-      common_name: "Northern Cardinal"
-      class_id: 7
-    - scientific_name: "Poecile carolinensis"
-      common_name: "Carolina Chickadee"
-      class_id: 8
-
-# ---- Audio processing --------------------------------------
+  - scientific_name: Turdus migratorius
+    common_name: American Robin
+    class_id: 5
+  - scientific_name: Corvus brachyrhynchos
+    common_name: American Crow
+    class_id: 6
+  - scientific_name: Cardinalis cardinalis
+    common_name: Northern Cardinal
+    class_id: 7
+  - scientific_name: Poecile carolinensis
+    common_name: Carolina Chickadee
+    class_id: 8
 audio:
   sample_rate: 32000
   duration: 5.0
@@ -72,74 +60,53 @@ audio:
   n_mels: 128
   fmax: 16000
   fmin: 150
-  window: "hann"
+  window: hann
   center: true
-  norm: "slaney"
-
-# ---- Preprocessing -----------------------------------------
+  norm: slaney
 preprocessing:
-  normalization: "peak"
+  normalization: peak
   remove_silence: true
   silence_threshold: 25
   bandpass_filter: true
   low_cutoff: 150
   high_cutoff: 15000
   apply_trim: true
-  pad_mode: "constant"
-
-# ---- Model -------------------------------------------------
+  pad_mode: constant
 model:
-  architecture: "efficientnet_b1"   # options: efficientnet_b1, efficientnet_b0, custom_cnn
-  num_classes: 9                    # 5 target + 4 background
+  architecture: efficientnet_b1
+  num_classes: 9
   pretrained: true
   dropout_rate: 0.4
-  attention_pooling: true           # NEW: attention pooling head
-  freeze_backbone: true             # start frozen, unfreeze in phase 2
-
-# ---- Training ----------------------------------------------
+  attention_pooling: true
+  freeze_backbone: true
 training:
   batch_size: 32
   epochs: 60
-  # Phase 1: backbone frozen, train head only
   phase1_epochs: 15
   phase1_lr: 0.001
-  # Phase 2: unfreeze last 3 blocks, fine-tune end-to-end
   phase2_epochs: 45
   phase2_lr: 0.0001
   phase2_unfreeze_blocks: 3
-
   weight_decay: 0.0001
   label_smoothing: 0.1
   use_class_weights: true
-  use_focal_loss: true              # NEW: Focal Loss for class imbalance
+  use_focal_loss: true
   focal_loss_gamma: 2.0
   focal_loss_alpha: 0.25
-
-  # Data splits
   validation_split: 0.15
   test_split: 0.15
   random_seed: 42
   stratified: true
-
-  # K-Fold cross validation
   use_kfold: true
   kfold_splits: 5
-
-  # LR scheduling
-  warmup_epochs: 5                  # NEW: linear warm-up
-  scheduler: "cosine"               # cosine annealing after warm-up
-  min_lr: 1.0e-7
-
-  # Early stopping
+  warmup_epochs: 5
+  scheduler: cosine
+  min_lr: 1.0e-07
   early_stopping_patience: 12
-  monitor_metric: "val_f1_weighted"
-
-  optimizer: "adamw"
-
-# ---- Augmentation ------------------------------------------
+  monitor_metric: val_f1_weighted
+  optimizer: adamw
 augmentation:
   enabled: true
-  # SpecAugment
   time_masking:
     enabled: true
     max_mask_pct: 0.15
@@ -150,81 +117,73 @@ augmentation:
     max_mask_pct: 0.15
     num_masks: 2
     probability: 0.5
-  # NEW: Mixup on spectrograms
   mixup:
     enabled: true
     alpha: 0.3
     probability: 0.4
-  # NEW: CutMix on spectrograms
   cutmix:
     enabled: true
     alpha: 0.5
     probability: 0.3
-  # Background noise overlay
   noise_overlay:
     enabled: true
-    noise_factor_range: [0.002, 0.015]
+    noise_factor_range:
+    - 0.002
+    - 0.015
     probability: 0.4
-  # Gain / amplitude
   gain:
     enabled: true
-    gain_range: [0.7, 1.3]
+    gain_range:
+    - 0.7
+    - 1.3
     probability: 0.4
-  # Pitch shift (applied at audio level before spectrogram)
   pitch_shift:
     enabled: true
-    steps_range: [-1.5, 1.5]
+    steps_range:
+    - -1.5
+    - 1.5
     probability: 0.3
-  # Time stretch
   time_stretch:
     enabled: true
-    rate_range: [0.85, 1.15]
+    rate_range:
+    - 0.85
+    - 1.15
     probability: 0.3
-
-# ---- Inference / deployment --------------------------------
 inference:
   confidence_threshold: 0.65
   smoothing_window: 5
   alert_thresholds:
-    critical: 0.80
-    high: 0.70
-    medium: 0.60
-
-# ---- Export -----------------------------------------------
+    critical: 0.8
+    high: 0.7
+    medium: 0.6
 export:
   onnx_enabled: true
-  quantize_int8: true               # NEW: INT8 quantization
+  quantize_int8: true
   target_latency_ms: 100
-
-# ---- Evaluation -------------------------------------------
 evaluation:
   metrics:
-    - accuracy
-    - precision_weighted
-    - recall_weighted
-    - f1_weighted
-    - f1_per_class
-    - roc_auc_ovr
-    - calibration_ece
-  generate_gradcam: true            # NEW: Grad-CAM visualizations
+  - accuracy
+  - precision_weighted
+  - recall_weighted
+  - f1_weighted
+  - f1_per_class
+  - roc_auc_ovr
+  - calibration_ece
+  generate_gradcam: true
   save_confusion_matrix: true
   save_roc_curves: true
   save_pr_curves: true
-
-# ---- Paths ------------------------------------------------
 paths:
-  data_dir: "./data"
-  raw_audio_dir: "./data/raw/audio"
-  processed_dir: "./data/processed"
-  cache_dir: "./data/cache"
-  models_dir: "./models/saved_models"
-  logs_dir: "./logs"
-  results_dir: "./experiments/results"
-  figures_dir: "./experiments/figures"
-
-# ---- Hardware ---------------------------------------------
+  data_dir: ./data
+  raw_audio_dir: ./data/raw/audio
+  processed_dir: ./data/processed
+  cache_dir: ./data/cache
+  models_dir: ./models/saved_models
+  logs_dir: ./logs
+  results_dir: ./experiments/results
+  figures_dir: ./experiments/figures
 hardware:
-  device: "auto"
+  device: auto
   num_workers: 2
   pin_memory: true
   mixed_precision: true
