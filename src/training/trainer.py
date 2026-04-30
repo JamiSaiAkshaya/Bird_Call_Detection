@@ -78,7 +78,7 @@ class BirdDetectionTrainer:
 
         self.use_amp = (config["hardware"].get("mixed_precision", True)
                         and torch.cuda.is_available())
-        self.scaler = torch.cuda.amp.GradScaler() if self.use_amp else None
+        self.scaler = torch.amp.GradScaler("cuda") if self.use_amp else None
 
         # augmentation flags
         self.mixup_cfg = config.get("augmentation", {}).get("mixup", {})
@@ -138,7 +138,7 @@ class BirdDetectionTrainer:
 
                 optimizer.zero_grad()
                 if self.use_amp:
-                    with torch.cuda.amp.autocast():
+                    with torch.amp.autocast("cuda"):
                         out = self.model(specs)
                         loss = criterion(out, soft_labels if soft_labels is not None else labels)
                     self.scaler.scale(loss).backward()
@@ -201,7 +201,7 @@ class BirdDetectionTrainer:
             for specs, labels in loader:
                 specs, labels = specs.to(self.device), labels.to(self.device)
                 if self.use_amp:
-                    with torch.cuda.amp.autocast():
+                    with torch.amp.autocast("cuda"):
                         out = self.model(specs)
                 else:
                     out = self.model(specs)

@@ -51,8 +51,15 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 ```bash
 pip install -r requirements.txt
+```
+
+### 4. Install project in editable mode
+
+```bash
 pip install -e .
 ```
+
+> **Note — Python 3.13 users:** numpy 2.x is fully supported. Do NOT manually pin numpy<2.0.
 
 ### 4. Run the notebook
 

@@ -1,12 +1,12 @@
 # ============================================================
 # Bird Call Detection - ML Project Dependencies
-# Python 3.10+ compatible
-# Install: pip install -r requirements.txt
+# Python 3.13 + Windows compatible
+#
+# INSTALL ORDER:
+#   Step 1: pip install torch torchvision torchaudio
+#   Step 2: pip install -r requirements.txt
+#   Step 3: pip install -e .
 # ============================================================
-
-# ---- PyTorch (install separately BEFORE this file) ---------
-# CPU:  pip install torch torchvision torchaudio
-# GPU:  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 # ---- Audio processing --------------------------------------
 librosa>=0.10.0
@@ -16,7 +16,8 @@ scipy>=1.11.0
 resampy>=0.4.2
 
 # ---- Data science ------------------------------------------
-numpy>=1.24.0,<2.0
+# numpy 2.x is fine — do NOT pin to <2.0 (breaks Python 3.13)
+numpy>=1.26.0
 pandas>=2.0.0
 scikit-learn>=1.3.0
 matplotlib>=3.7.0

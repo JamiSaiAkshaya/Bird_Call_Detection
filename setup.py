@@ -1,94 +1,66 @@
 """
-Setup script for AI-Powered Bird Call Detection project
-Professional package configuration for easy installation and distribution
+Setup script for AI-Powered Bird Call Detection — ML Extension v2
 """
 
 from setuptools import setup, find_packages
 from pathlib import Path
 
-# Read README for long description
-this_directory = Path(__file__).parent
-long_description = (this_directory / "README.md").read_text(encoding='utf-8')
-
-# Read requirements
-requirements = []
-if (this_directory / "requirements.txt").exists():
-    with open(this_directory / "requirements.txt", 'r') as f:
-        requirements = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+this_dir = Path(__file__).parent
+long_description = (this_dir / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="bird-call-detection",
-    version="1.0.0",
-    author="Your Name",
-    author_email="your.email@example.com",
-    description="AI-powered bird call detection system for wildlife conservation",
+    version="2.0.0",
+    author="JamiSaiAkshaya",
+    author_email="230701121@rajalakshmi.edu.in",
+    description="AI-powered bird call detection system for wildlife conservation — ML Extension",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/your-username/bird-call-detection",
-    project_urls={
-        "Bug Tracker": "https://github.com/your-username/bird-call-detection/issues",
-        "Documentation": "https://github.com/your-username/bird-call-detection/wiki",
-        "Source Code": "https://github.com/your-username/bird-call-detection",
-    },
-    packages=find_packages(where="src"),
-    package_dir={"": "src"},
+    url="https://github.com/JamiSaiAkshaya/Bird_Call_Detection",
+    packages=find_packages(where="."),
     classifiers=[
-        "Development Status :: 4 - Beta",
-        "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        "Topic :: Scientific/Engineering :: Information Analysis",
-        "Topic :: Multimedia :: Sound/Audio :: Analysis",
     ],
     python_requires=">=3.10",
-    install_requires=requirements,
+    # Keep install_requires minimal — user installs torch separately
+    # and requirements.txt handles everything else.
+    install_requires=[
+        "numpy>=1.26.0",
+        "librosa>=0.10.0",
+        "soundfile>=0.12.1",
+        "scipy>=1.11.0",
+        "pandas>=2.0.0",
+        "scikit-learn>=1.3.0",
+        "matplotlib>=3.7.0",
+        "seaborn>=0.12.0",
+        "tqdm>=4.66.0",
+        "pyyaml>=6.0",
+        "requests>=2.31.0",
+        "Pillow>=10.0.0",
+    ],
     extras_require={
-        "dev": [
-            "pytest>=7.4.0",
-            "black>=23.3.0",
-            "flake8>=6.0.0",
-            "isort>=5.12.0",
-            "mypy>=1.0.0",
+        "ml": [
+            "timm>=0.9.0",
+            "onnx>=1.15.0",
+            "onnxruntime>=1.17.0",
         ],
         "notebook": [
             "jupyter>=1.0.0",
-            "ipykernel>=6.23.1",
-            "ipywidgets>=8.0.0",
+            "ipykernel>=6.25.0",
+            "ipywidgets>=8.1.0",
         ],
-        "deployment": [
-            "gunicorn>=20.1.0",
-            "uvicorn>=0.20.0",
-            "fastapi>=0.95.0",
-        ],
-    },
-    entry_points={
-        "console_scripts": [
-            "bird-detect=src.inference.realtime_detector:main",
-            "bird-train=src.training.trainer:main",
-            "bird-api=src.api.app:main",
+        "dev": [
+            "pytest>=7.4.0",
         ],
     },
     include_package_data=True,
-    package_data={
-        "": ["*.yaml", "*.yml", "*.json", "*.md", "*.txt"],
-    },
-    data_files=[
-        ("config", ["config/config.yaml"]),
-    ],
+    package_data={"": ["*.yaml", "*.yml", "*.json", "*.md"]},
     zip_safe=False,
-    keywords=[
-        "bird call detection",
-        "wildlife conservation", 
-        "audio classification",
-        "deep learning",
-        "pytorch",
-        "efficientnet",
-        "endangered species",
-        "bioacoustics",
-        "conservation technology",
-    ],
 )
