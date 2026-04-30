@@ -1,439 +1,293 @@
 """
-EfficientNet-B1 Bird Call Classifier
-Professional implementation with transfer learning capabilities
+EfficientNet-B1 Bird Call Classifier — ML Extension v2
+Key additions:
+  - Attention pooling head (replaces global avg pool)
+  - Progressive backbone unfreezing helpers
+  - Grad-CAM support
+  - ONNX export helper
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.models import efficientnet_b1, EfficientNet_B1_Weights
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, Tuple, List
 import logging
+
+try:
+    import timm
+    TIMM_AVAILABLE = True
+except ImportError:
+    TIMM_AVAILABLE = False
+
+try:
+    from torchvision.models import efficientnet_b1, EfficientNet_B1_Weights
+    TORCHVISION_AVAILABLE = True
+except ImportError:
+    TORCHVISION_AVAILABLE = False
+
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Attention Pooling
+# ---------------------------------------------------------------------------
+
+class AttentionPool2d(nn.Module):
+    """
+    Soft-attention pooling over spatial feature maps.
+    Learns which regions of the spectrogram are most discriminative.
+    Replaces global average pooling.
+    """
+
+    def __init__(self, in_channels: int):
+        super().__init__()
+        self.attention = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels // 8, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels // 8, 1, kernel_size=1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [B, C, H, W]
+        attn = self.attention(x)           # [B, 1, H, W]
+        attn = attn.view(attn.size(0), -1) # [B, H*W]
+        attn = F.softmax(attn, dim=-1)
+        attn = attn.view(attn.size(0), 1, x.size(2), x.size(3))
+        pooled = (x * attn).sum(dim=(2, 3))  # [B, C]
+        return pooled
+
+
+# ---------------------------------------------------------------------------
+# Main classifier
+# ---------------------------------------------------------------------------
 
 class BirdCallClassifier(nn.Module):
     """
-    EfficientNet-B1 based classifier for bird call detection
-    Optimized for endangered species identification
+    EfficientNet-B1 backbone + attention-pooling head for bird species classification.
     """
-    
-    def __init__(self, 
-                 num_classes: int = 5,
-                 architecture: str = 'efficientnet_b1',
-                 pretrained: bool = True,
-                 dropout_rate: float = 0.5,
-                 use_attention: bool = False,
-                 freeze_backbone: bool = False):
-        """
-        Initialize the bird call classifier
-        
-        Args:
-            num_classes: Number of bird species to classify
-            architecture: Model architecture (currently supports efficientnet_b1)
-            pretrained: Whether to use pretrained weights
-            dropout_rate: Dropout rate for regularization
-            use_attention: Whether to use attention mechanism
-            freeze_backbone: Whether to freeze backbone initially
-        """
-        super(BirdCallClassifier, self).__init__()
-        
+
+    def __init__(self, num_classes: int = 9, pretrained: bool = True,
+                 dropout_rate: float = 0.4, attention_pooling: bool = True):
+        super().__init__()
         self.num_classes = num_classes
-        self.architecture = architecture
-        self.dropout_rate = dropout_rate
-        self.use_attention = use_attention
-        
-        self.logger = logging.getLogger(__name__)
-        
-        # Initialize backbone
-        self._build_backbone(pretrained, freeze_backbone)
-        
-        # Build classifier head
-        self._build_classifier_head()
-        
-        # Initialize weights
-        self._initialize_weights()
-        
-        self.logger.info(f"Initialized {architecture} classifier for {num_classes} classes")
-        
-    def _build_backbone(self, pretrained: bool, freeze_backbone: bool):
-        """Build the backbone network"""
-        if self.architecture == 'efficientnet_b1':
-            weights = EfficientNet_B1_Weights.IMAGENET1K_V1 if pretrained else None
-            self.backbone = efficientnet_b1(weights=weights)
-            
-            # Remove the original classifier
-            self.backbone.classifier = nn.Identity()
-            
-            # Get feature dimension
-            self.feature_dim = 1280  # EfficientNet-B1 feature dimension
-            
-            # Freeze backbone if requested
-            if freeze_backbone:
-                self._freeze_backbone()
+        self.attention_pooling = attention_pooling
+
+        # --- backbone ---
+        self.backbone, self.feature_dim = self._build_backbone(pretrained)
+
+        # --- pooling ---
+        if attention_pooling:
+            self.pool = AttentionPool2d(self.feature_dim)
         else:
-            raise ValueError(f"Unsupported architecture: {self.architecture}")
-    
-    def _freeze_backbone(self):
-        """Freeze backbone parameters"""
-        for param in self.backbone.parameters():
-            param.requires_grad = False
-        self.logger.info("Backbone frozen")
-    
-    def _unfreeze_backbone(self):
-        """Unfreeze backbone parameters"""
-        for param in self.backbone.parameters():
-            param.requires_grad = True
-        self.logger.info("Backbone unfrozen")
-    
-    def _build_classifier_head(self):
-        """Build the classification head"""
-        layers = []
-        
-        # Global Average Pooling (already included in backbone)
-        
-        # Feature processing layers
-        layers.extend([
+            self.pool = nn.AdaptiveAvgPool2d(1)
+
+        # --- classification head ---
+        self.head = nn.Sequential(
             nn.Linear(self.feature_dim, 512),
             nn.BatchNorm1d(512),
-            nn.ReLU(inplace=True),
-            nn.Dropout(self.dropout_rate)
-        ])
-        
-        # Intermediate layer
-        layers.extend([
+            nn.SiLU(inplace=True),
+            nn.Dropout(dropout_rate),
             nn.Linear(512, 256),
             nn.BatchNorm1d(256),
-            nn.ReLU(inplace=True),
-            nn.Dropout(self.dropout_rate * 0.5)
-        ])
-        
-        # Attention mechanism (optional)
-        if self.use_attention:
-            self.attention = nn.MultiheadAttention(
-                embed_dim=256,
-                num_heads=8,
-                dropout=0.1,
-                batch_first=True
+            nn.SiLU(inplace=True),
+            nn.Dropout(dropout_rate * 0.5),
+            nn.Linear(256, num_classes),
+        )
+
+        self._init_head()
+        logger.info(f"BirdCallClassifier: {num_classes} classes, "
+                    f"attn_pool={attention_pooling}, feat_dim={self.feature_dim}")
+
+    # ------------------------------------------------------------------
+    def _build_backbone(self, pretrained: bool) -> Tuple[nn.Module, int]:
+        """Try timm first, fall back to torchvision."""
+        if TIMM_AVAILABLE:
+            model = timm.create_model(
+                "efficientnet_b1", pretrained=pretrained, num_classes=0, global_pool=""
             )
-            layers.append(nn.LayerNorm(256))
-        
-        # Final classification layer
-        layers.append(nn.Linear(256, self.num_classes))
-        
-        self.classifier = nn.Sequential(*layers)
-    
-    def _initialize_weights(self):
-        """Initialize weights for new layers"""
-        for module in self.classifier.modules():
-            if isinstance(module, nn.Linear):
-                nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0)
-            elif isinstance(module, nn.BatchNorm1d):
-                nn.init.constant_(module.weight, 1)
-                nn.init.constant_(module.bias, 0)
-    
-    def _convert_input(self, x: torch.Tensor) -> torch.Tensor:
+            feature_dim = model.num_features
+            return model, feature_dim
+
+        if TORCHVISION_AVAILABLE:
+            weights = EfficientNet_B1_Weights.IMAGENET1K_V1 if pretrained else None
+            model = efficientnet_b1(weights=weights)
+            feature_dim = model.classifier[1].in_features
+            model.classifier = nn.Identity()
+            model.avgpool = nn.Identity()
+            return model, feature_dim
+
+        raise ImportError("Install timm or torchvision: pip install timm")
+
+    def _init_head(self):
+        for m in self.head.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.BatchNorm1d):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
+
+    # ------------------------------------------------------------------
+    # Progressive unfreezing helpers
+    # ------------------------------------------------------------------
+
+    def freeze_backbone(self):
+        """Freeze all backbone parameters (Phase 1)."""
+        for p in self.backbone.parameters():
+            p.requires_grad = False
+        logger.info("Backbone frozen — training head only")
+
+    def unfreeze_last_n_blocks(self, n: int = 3):
         """
-        Convert single-channel mel-spectrogram to 3-channel for EfficientNet
-        
-        Args:
-            x: Input tensor [B, 1, H, W]
-            
-        Returns:
-            RGB tensor [B, 3, H, W]
+        Unfreeze the last n blocks of EfficientNet backbone (Phase 2).
+        Works with both timm and torchvision layouts.
         """
-        # Convert single channel to 3 channels by repeating
-        if x.shape[1] == 1:
+        # collect named children of the backbone
+        children = list(self.backbone.named_children())
+        # unfreeze the last n
+        for name, module in children[-n:]:
+            for p in module.parameters():
+                p.requires_grad = True
+        trainable = sum(p.numel() for p in self.backbone.parameters() if p.requires_grad)
+        logger.info(f"Unfroze last {n} backbone blocks — {trainable:,} backbone params trainable")
+
+    def unfreeze_all(self):
+        for p in self.backbone.parameters():
+            p.requires_grad = True
+        logger.info("Full backbone unfrozen")
+
+    # ------------------------------------------------------------------
+    # Forward
+    # ------------------------------------------------------------------
+
+    def _to_rgb(self, x: torch.Tensor) -> torch.Tensor:
+        """Convert [B,1,H,W] mel-spectrogram to [B,3,H,W] for pretrained backbone."""
+        if x.size(1) == 1:
             x = x.repeat(1, 3, 1, 1)
-        
-        # Ensure proper input size for EfficientNet (224x224 minimum)
-        if x.shape[2] < 224 or x.shape[3] < 224:
-            x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
-        
+        if x.size(2) < 224 or x.size(3) < 224:
+            x = F.interpolate(x, size=(224, 224), mode="bilinear", align_corners=False)
         return x
-    
-    def extract_features(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Extract features from backbone without classification
-        
-        Args:
-            x: Input tensor [B, 1, H, W]
-            
-        Returns:
-            Feature tensor [B, feature_dim]
-        """
-        # Convert input format
-        x = self._convert_input(x)
-        
-        # Extract features using backbone
-        features = self.backbone(x)
-        
-        return features
-    
-    def forward(self, x: torch.Tensor, return_features: bool = False) -> torch.Tensor:
-        """
-        Forward pass through the network
-        
-        Args:
-            x: Input mel-spectrogram tensor [B, 1, H, W]
-            return_features: Whether to return intermediate features
-            
-        Returns:
-            Classification logits [B, num_classes] or tuple with features
-        """
-        # Extract features
-        features = self.extract_features(x)
-        
-        # Apply attention if enabled
-        if self.use_attention:
-            # Reshape for attention: [B, 1, feature_dim]
-            attn_input = features.unsqueeze(1)
-            attn_output, _ = self.attention(attn_input, attn_input, attn_input)
-            features = attn_output.squeeze(1)
-        
-        # Classification head
-        logits = self.classifier(features)
-        
+
+    def forward(self, x: torch.Tensor,
+                return_features: bool = False) -> torch.Tensor:
+        x = self._to_rgb(x)
+        features = self.backbone(x)  # [B, C, H, W] (timm with global_pool="")
+
+        # torchvision returns [B, C, 1, 1] after its avgpool=Identity
+        if features.dim() == 2:
+            # timm sometimes returns [B, C] — add spatial dims
+            features = features.unsqueeze(-1).unsqueeze(-1)
+
+        # pool
+        if self.attention_pooling:
+            pooled = self.pool(features)       # [B, C]
+        else:
+            pooled = self.pool(features).flatten(1)  # [B, C]
+
+        logits = self.head(pooled)
+
         if return_features:
-            return logits, features
+            return logits, pooled
         return logits
-    
+
     def predict_proba(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Get prediction probabilities
-        
-        Args:
-            x: Input tensor [B, 1, H, W]
-            
-        Returns:
-            Probability tensor [B, num_classes]
-        """
         with torch.no_grad():
-            logits = self.forward(x)
-            probabilities = F.softmax(logits, dim=1)
-        return probabilities
-    
-    def predict(self, x: torch.Tensor, return_confidence: bool = False) -> torch.Tensor:
+            return F.softmax(self.forward(x), dim=1)
+
+    # ------------------------------------------------------------------
+    # Grad-CAM
+    # ------------------------------------------------------------------
+
+    def get_gradcam(self, x: torch.Tensor,
+                    target_class: Optional[int] = None) -> torch.Tensor:
         """
-        Make predictions
-        
-        Args:
-            x: Input tensor [B, 1, H, W]
-            return_confidence: Whether to return confidence scores
-            
-        Returns:
-            Predicted class indices [B] or tuple with confidence
-        """
-        probabilities = self.predict_proba(x)
-        confidence, predicted = torch.max(probabilities, dim=1)
-        
-        if return_confidence:
-            return predicted, confidence
-        return predicted
-    
-    def get_cam(self, x: torch.Tensor, target_class: Optional[int] = None) -> torch.Tensor:
-        """
-        Generate Class Activation Map (CAM) for interpretation
-        
-        Args:
-            x: Input tensor [B, 1, H, W]
-            target_class: Target class for CAM (uses predicted class if None)
-            
-        Returns:
-            CAM tensor [B, H, W]
+        Compute Grad-CAM heatmap for input spectrogram batch.
+        Returns heatmap tensor [B, H, W] normalised to [0,1].
         """
         self.eval()
-        
-        # Register hook to capture feature maps
-        features_maps = []
-        def hook_feature(module, input, output):
-            features_maps.append(output)
-        
-        # Find the last convolutional layer
-        last_conv_layer = None
-        for name, module in self.backbone.named_modules():
-            if isinstance(module, nn.Conv2d):
-                last_conv_layer = module
-        
-        if last_conv_layer is None:
-            raise ValueError("No convolutional layer found for CAM generation")
-        
-        handle = last_conv_layer.register_forward_hook(hook_feature)
-        
+        x = self._to_rgb(x)
+
+        feat_maps = []
+        grads = []
+
+        # hook on the last backbone block
+        children = list(self.backbone.children())
+        target_layer = children[-1]
+
+        def fwd_hook(m, inp, out):
+            feat_maps.append(out)
+
+        def bwd_hook(m, gin, gout):
+            grads.append(gout[0])
+
+        fh = target_layer.register_forward_hook(fwd_hook)
+        bh = target_layer.register_full_backward_hook(bwd_hook)
+
         try:
-            # Forward pass
-            logits = self.forward(x)
-            
+            out = self.forward(x)
             if target_class is None:
-                target_class = torch.argmax(logits, dim=1)
-            
-            # Get feature maps
-            feature_maps = features_maps[-1]  # [B, C, H, W]
-            
-            # Get weights from classifier
-            classifier_weights = self.classifier[-1].weight  # [num_classes, feature_dim]
-            
-            # Generate CAM
-            batch_size = x.shape[0]
-            cams = []
-            
-            for i in range(batch_size):
-                class_idx = target_class[i] if torch.is_tensor(target_class) else target_class
-                weights = classifier_weights[class_idx]  # [feature_dim]
-                
-                # Weighted combination of feature maps
-                feature_map = feature_maps[i]  # [C, H, W]
-                cam = torch.sum(weights.unsqueeze(-1).unsqueeze(-1) * feature_map, dim=0)
-                
-                # Normalize
-                cam = F.relu(cam)
-                cam = cam - cam.min()
-                cam = cam / (cam.max() + 1e-8)
-                
-                cams.append(cam)
-            
-            cam_tensor = torch.stack(cams, dim=0)
-            
+                target_class = out.argmax(dim=1)
+
+            self.zero_grad()
+            score = out[:, target_class].sum() if isinstance(target_class, int) \
+                else out.gather(1, target_class.view(-1, 1)).sum()
+            score.backward()
+
+            fmaps = feat_maps[0]   # [B, C, H, W]
+            gs = grads[0]          # [B, C, H, W]
+            weights = gs.mean(dim=(2, 3), keepdim=True)  # [B, C, 1, 1]
+            cam = F.relu((weights * fmaps).sum(dim=1))   # [B, H, W]
+
+            # normalise per sample
+            B = cam.size(0)
+            cam_flat = cam.view(B, -1)
+            cam_min = cam_flat.min(dim=1)[0].view(B, 1, 1)
+            cam_max = cam_flat.max(dim=1)[0].view(B, 1, 1)
+            cam = (cam - cam_min) / (cam_max - cam_min + 1e-8)
         finally:
-            handle.remove()
-        
-        return cam_tensor
+            fh.remove()
+            bh.remove()
+
+        return cam.detach()
+
+    # ------------------------------------------------------------------
+    # ONNX export
+    # ------------------------------------------------------------------
+
+    def export_onnx(self, save_path: str, input_shape: Tuple = (1, 1, 128, 313)):
+        """Export model to ONNX format."""
+        self.eval()
+        dummy = torch.zeros(*input_shape)
+        torch.onnx.export(
+            self,
+            dummy,
+            save_path,
+            export_params=True,
+            opset_version=17,
+            input_names=["spectrogram"],
+            output_names=["logits"],
+            dynamic_axes={"spectrogram": {0: "batch"}, "logits": {0: "batch"}},
+        )
+        logger.info(f"ONNX model saved to {save_path}")
 
 
-class MultiScaleBirdClassifier(BirdCallClassifier):
-    """
-    Multi-scale version of the bird classifier for handling varying audio lengths
-    """
-    
-    def __init__(self, scales: List[int] = [224, 256, 288], **kwargs):
-        """
-        Initialize multi-scale classifier
-        
-        Args:
-            scales: List of input scales to process
-            **kwargs: Arguments for base classifier
-        """
-        super().__init__(**kwargs)
-        self.scales = scales
-        
-    def forward(self, x: torch.Tensor, return_features: bool = False) -> torch.Tensor:
-        """Multi-scale forward pass"""
-        scale_outputs = []
-        
-        for scale in self.scales:
-            # Resize input to current scale
-            if x.shape[2] != scale or x.shape[3] != scale:
-                scaled_x = F.interpolate(x, size=(scale, scale), mode='bilinear', align_corners=False)
-            else:
-                scaled_x = x
-            
-            # Forward pass at current scale
-            output = super().forward(scaled_x, return_features=False)
-            scale_outputs.append(output)
-        
-        # Ensemble the outputs
-        ensemble_output = torch.mean(torch.stack(scale_outputs, dim=0), dim=0)
-        
-        if return_features:
-            # Return features from the largest scale
-            features = self.extract_features(
-                F.interpolate(x, size=(max(self.scales), max(self.scales)), 
-                            mode='bilinear', align_corners=False)
-            )
-            return ensemble_output, features
-        
-        return ensemble_output
-
+# ---------------------------------------------------------------------------
+# Factory
+# ---------------------------------------------------------------------------
 
 def create_model(config: Dict) -> BirdCallClassifier:
-    """
-    Factory function to create model from configuration
-    
-    Args:
-        config: Configuration dictionary
-        
-    Returns:
-        Initialized model
-    """
-    model_config = config['model']
-    
-    model = BirdCallClassifier(
-        num_classes=model_config['num_classes'],
-        architecture=model_config['architecture'],
-        pretrained=model_config['pretrained'],
-        dropout_rate=model_config['dropout_rate'],
-        use_attention=model_config.get('use_attention', False),
-        freeze_backbone=model_config.get('freeze_backbone', False)
+    mc = config["model"]
+    return BirdCallClassifier(
+        num_classes=mc["num_classes"],
+        pretrained=mc.get("pretrained", True),
+        dropout_rate=mc.get("dropout_rate", 0.4),
+        attention_pooling=mc.get("attention_pooling", True),
     )
-    
-    return model
 
 
-def load_pretrained_model(checkpoint_path: str, config: Dict, device: str = 'cpu') -> BirdCallClassifier:
-    """
-    Load a pretrained model from checkpoint
-    
-    Args:
-        checkpoint_path: Path to model checkpoint
-        config: Model configuration
-        device: Device to load model on
-        
-    Returns:
-        Loaded model
-    """
-    # Create model
-    model = create_model(config)
-    
-    # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    
-    # Load state dict
-    if 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
-    else:
-        model.load_state_dict(checkpoint)
-    
-    model.eval()
-    model.to(device)
-    
-    return model
-
-
-def count_parameters(model: torch.nn.Module) -> Tuple[int, int]:
-    """
-    Count model parameters
-    
-    Args:
-        model: PyTorch model
-        
-    Returns:
-        Tuple of (total_params, trainable_params)
-    """
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    
-    return total_params, trainable_params
-
-
-def model_summary(model: torch.nn.Module, input_shape: Tuple[int, ...] = (1, 128, 157)) -> str:
-    """
-    Generate model summary
-    
-    Args:
-        model: PyTorch model
-        input_shape: Input tensor shape (excluding batch dimension)
-        
-    Returns:
-        Model summary string
-    """
-    total_params, trainable_params = count_parameters(model)
-    
-    summary = f"""
-    Model: {model.__class__.__name__}
-    Total parameters: {total_params:,}
-    Trainable parameters: {trainable_params:,}
-    Non-trainable parameters: {total_params - trainable_params:,}
-    Input shape: {input_shape}
-    """
-    
-    return summary
+def count_parameters(model: nn.Module) -> Tuple[int, int]:
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return total, trainable

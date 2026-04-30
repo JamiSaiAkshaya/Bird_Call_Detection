@@ -338,3 +338,17 @@ k8s/staging/
 local_config.yaml
 dev_config.yaml
 test_config.yaml
+# ML Extension v2 additions
+experiments/results/*.json
+experiments/figures/*.png
+data/raw/audio/*.mp3
+data/raw/audio/*.wav
+data/raw/audio/*.flac
+models/saved_models/*.pth
+models/saved_models/*.onnx
+
+# Keep gitkeeps and structure
+!experiments/results/.gitkeep
+!experiments/figures/.gitkeep
+!data/raw/audio/.gitkeep
+!models/saved_models/.gitkeep
