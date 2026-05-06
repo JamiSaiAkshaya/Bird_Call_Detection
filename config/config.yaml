@@ -3,7 +3,8 @@ project:
   version: 2.0.0
   description: Multi-class endangered bird species detection with rigorous ML methodology
 xeno_canto:
-  base_url: https://www.xeno-canto.org/api/2/recordings
+  base_url: https://xeno-canto.org/api/3/recordings
+  api_key: 7b7aba974525b21cda33172f1420b03828661432
   timeout: 30
   max_retries: 3
   cache_enabled: true

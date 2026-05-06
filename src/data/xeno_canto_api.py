@@ -1,7 +1,11 @@
 """
-Xeno-Canto API Client — ML Extension v2 (fixed v3)
-Correct endpoint: https://www.xeno-canto.org/api/2/recordings
+Xeno-Canto API Client — ML Extension v3
+Correct endpoint: https://xeno-canto.org/api/3/recordings
+Requires API key (free) from: https://xeno-canto.org/article/854
 Query: scientific name only — NO q:A suffix — quality filtered locally
+
+NOTE: API v2 (/api/2/) was retired. v3 requires an API key.
+Get your free key at https://xeno-canto.org/article/854
 """
 
 import time, json, hashlib, requests, threading
@@ -14,8 +18,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Hard-coded correct URL — do not change
-_XC_URL = "https://www.xeno-canto.org/api/2/recordings"
+# API v3 endpoint — v2 was retired, v3 requires a free API key
+# Get your key at: https://xeno-canto.org/article/854
+_XC_URL = "https://xeno-canto.org/api/3/recordings"
 _QUALITY_RANK = {"A": 5, "B": 4, "C": 3, "D": 2, "E": 1, "no score": 0, "": 0}
 
 
@@ -33,6 +38,17 @@ class XenoCantoAPI:
         self._lock       = threading.Lock()
         self._last_req   = 0.0
 
+        # API v3 requires a free key — get one at https://xeno-canto.org/article/854
+        self.api_key = xc.get("api_key", None)
+        if not self.api_key:
+            logger.warning(
+                "No xeno_canto.api_key found in config. "
+                "API v3 requires a free key — visit https://xeno-canto.org/article/854 "
+                "(log in > Account > API Key). Add it to config/config.yaml:\n"
+                "  xeno_canto:\n"
+                "    api_key: YOUR_KEY_HERE"
+            )
+
         if self.cache_on:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -45,7 +61,7 @@ class XenoCantoAPI:
             ),
             "Accept": "application/json, */*",
             "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://www.xeno-canto.org/",
+            "Referer": "https://xeno-canto.org/",
         })
         logger.info(f"XenoCantoAPI ready  url={self.base_url}")
 
@@ -115,11 +131,43 @@ class XenoCantoAPI:
         logger.info(f'Got {len(results)} recordings for "{query}"')
         return results
 
+    @staticmethod
+    def _build_query(raw: str) -> str:
+        """
+        Convert a plain scientific name or English name into a v3-compatible
+        tagged query string.
+
+        API v3 requires tagged syntax — plain text returns 400.
+        Examples:
+          "Grus americana"     -> "gen:Grus sp:americana"
+          "Turdus migratorius" -> "gen:Turdus sp:migratorius"
+          "Robin"              -> "en:Robin"
+          already tagged       -> returned as-is
+        """
+        raw = raw.strip()
+        # Already tagged — pass through unchanged
+        if any(tag in raw for tag in ("gen:", "sp:", "en:", "cnt:", "q:")):
+            return raw
+        parts = raw.split()
+        if len(parts) == 1:
+            # Single word — treat as English common name
+            return f"en:{parts[0]}"
+        else:
+            # Two or more words — treat as "Genus species" scientific name
+            # (subspecies third word is dropped; genus+species is sufficient for XC)
+            return f"gen:{parts[0]} sp:{parts[1]}"
+
     def _api_get(self, query: str, page: int) -> Optional[Dict]:
         """
-        Single API request. Query must be plain text — scientific name only.
+        Single API request.
+        Auto-converts plain scientific/English names to v3 tagged syntax.
+        API v3 requires tags (gen:, sp:, en:) — plain text returns 400.
         """
-        params = {"query": query, "page": page}
+        tagged_query = self._build_query(query)
+        params = {"query": tagged_query, "page": page}
+        if self.api_key:
+            params["key"] = self.api_key
+        logger.debug(f"XC API: query={tagged_query!r} page={page}")
 
         for attempt in range(self.max_retries):
             try:
@@ -130,8 +178,9 @@ class XenoCantoAPI:
                 if r.status_code == 404:
                     logger.error(
                         f"404 Not Found — URL was: {r.url}\n"
-                        f"This usually means the API endpoint changed.\n"
-                        f"Check https://xeno-canto.org/help/search for the latest API docs."
+                        f"API v2 has been retired. This code now uses v3.\n"
+                        f"If you see this error, check your api_key in config.yaml.\n"
+                        f"Get a free key at https://xeno-canto.org/article/854"
                     )
                     return None   # don't retry 404
 
